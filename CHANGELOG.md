@@ -10,13 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - Red Ball Classic
 
 ### Added
-- N/A
+- (Internal) Added `soundsLoaded` ref to `game.tsx` to prevent multiple sound loading attempts.
+- Added placeholder `.wav` sound files (`bounce.wav`, `game_over.wav`) instructions for testing.
 
 ### Changed
-- N/A
+- **`FR-UX-01` Visual/Audio Feedback:** Migrated from deprecated `expo-av` to `expo-audio` for sound playback.
+- Updated sound asset loading in `game.tsx` to use relative paths (`require('../../assets/sounds/...')`) to resolve loading issues.
+- `package.json`: Replaced `expo-av` with `expo-audio`.
 
 ### Fixed
-- N/A
+- Resolved sound loading error "Requiring unknown module undefined" by switching to relative paths for sound assets and migrating to `expo-audio`.
 
 ## [0.0.1] - 2025-05-10 (Active Development Version)
 
@@ -31,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`FR-UI-02` Start / Restart Game UI & Flow (v0.2.0 feature)**:
   - Refined game start with "Tap to Start" overlay.
 - **`FR-UX-01` Basic Visual/Audio Feedback (v0.2.0 feature)**:
-  - Integrated `expo-av` for sound effects.
+  - Integrated `expo-av` (now `expo-audio`) for sound effects.
   - Added placeholders for `bounce_wall`, `bounce_paddle`, and `game_over` sounds.
   - Implemented sound playback for wall hits, paddle hits, and game over.
   - Added a simple visual scale "pop" to the paddle on ball collision using Reanimated.
