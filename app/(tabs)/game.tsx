@@ -8,10 +8,8 @@ import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from "expo-av";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   AppState,
-  Button,
   Dimensions,
   LayoutChangeEvent,
-  // --- Add Platform ---
   Platform,
   StyleSheet,
   TouchableOpacity,
@@ -26,31 +24,29 @@ import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withRepeat,
   withSequence,
   withTiming,
 } from "react-native-reanimated";
 
+// ... (Constants remain the same)
 const SCREEN_WIDTH = Dimensions.get("window").width;
-// --- Define a specific width for the web game area ---
-const WEB_GAME_AREA_WIDTH = 400; // Adjust this value as you see fit (e.g., 360, 450)
+const WEB_GAME_AREA_WIDTH = 400;
 const GAME_ASPECT_RATIO_VALUE = 9 / 14;
-
 interface GameAreaDimensions {
   x: number;
   y: number;
   width: number;
   height: number;
 }
-
-const BALL_RADIUS = 10;
+const BALL_RADIUS = 12;
 const INITIAL_BALL_SPEED_X = 2.5;
 const INITIAL_BALL_SPEED_Y = -2.5;
-
-const PADDLE_WIDTH = 80;
-const PADDLE_HEIGHT = 15;
+const PADDLE_WIDTH = 90;
+const PADDLE_HEIGHT = 18;
 const PADDLE_Y_OFFSET = 30;
-
 const HIGH_SCORE_KEY = "RedBallClassic_HighScore";
+const GAME_FONT_FAMILY = Platform.OS === "ios" ? "SpaceMono" : "monospace";
 
 export default function GameScreen() {
   const [gameAreaDimensions, setGameAreaDimensions] =
@@ -74,205 +70,279 @@ export default function GameScreen() {
   const [paddleCurrentX, setPaddleCurrentX] = useState(0);
   const paddleScale = useSharedValue(1);
 
-  const gameAreaBorderColor = useThemeColor(
-    { light: "#333", dark: "#ccc" },
-    "text"
+  const gameScreenBackgroundColor = useThemeColor({}, "gameBackground");
+  const gameAreaBackgroundColor = useThemeColor({}, "gameAreaBackground");
+  const gameAreaBorderColor = useThemeColor({}, "gameBorder");
+  const ballColor = useThemeColor({}, "gamePrimary");
+  const paddleColor = useThemeColor({}, "gameSecondary");
+  const overlayTextColor = useThemeColor({}, "gameText");
+  const scoreHeaderColor = useThemeColor({}, "gameAccent");
+  const titleColor = useThemeColor({}, "gamePrimary");
+  const restartButtonBorderColor = useThemeColor({}, "gameAccent"); // Used for dynamic styling
+  const restartButtonTextColor = useThemeColor({}, "gameButtonText");
+  const restartButtonBackgroundColor = useThemeColor(
+    {},
+    "gameButtonBackground"
   );
-  const ballColor = useThemeColor({ light: "red", dark: "orangered" }, "tint");
-  const paddleColor = useThemeColor(
-    { light: "blue", dark: "royalblue" },
-    "tint"
-  );
-  const overlayTextColor = useThemeColor(
-    { light: "black", dark: "white" },
-    "text"
-  );
-  const scoreTextColor = useThemeColor(
-    { light: "#11181C", dark: "#ECEDEE" },
-    "text"
-  );
-
   const animationFrameId = useRef<number | null>(null);
   const appState = useRef(AppState.currentState);
-
   const bounceSound = useRef<Audio.Sound | null>(null);
   const gameOverSound = useRef<Audio.Sound | null>(null);
   const soundsLoaded = useRef(false);
+  const tapToStartOpacity = useSharedValue(1);
+  const gameOverScale = useSharedValue(0);
 
+  useEffect(() => {
+    if (!isGameActive && !isGameOver && gameAreaDimensions) {
+      tapToStartOpacity.value = withRepeat(
+        withSequence(
+          withTiming(0.4, { duration: 800 }),
+          withTiming(1, { duration: 800 })
+        ),
+        -1,
+        true
+      );
+    } else {
+      tapToStartOpacity.value = withTiming(isGameActive || isGameOver ? 0 : 1, {
+        duration: 200,
+      });
+    }
+  }, [isGameActive, isGameOver, gameAreaDimensions, tapToStartOpacity]);
+  const animatedTapToStartStyle = useAnimatedStyle(() => ({
+    opacity: tapToStartOpacity.value,
+  }));
+  useEffect(() => {
+    gameOverScale.value = withTiming(isGameOver ? 1 : 0, {
+      duration: isGameOver ? 400 : 200,
+    });
+  }, [isGameOver, gameOverScale]);
+  const animatedGameOverStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: gameOverScale.value }],
+    opacity: gameOverScale.value,
+  }));
   const loadHighScore = useCallback(async () => {
     try {
-      const storedHighScore = await AsyncStorage.getItem(HIGH_SCORE_KEY);
-      if (storedHighScore !== null) {
-        setHighScore(parseInt(storedHighScore, 10));
-      }
+      const hs = await AsyncStorage.getItem(HIGH_SCORE_KEY);
+      if (hs !== null) setHighScore(parseInt(hs, 10));
     } catch (e) {
-      console.error("Failed to load high score.", e);
+      console.error("HS Load Err", e);
     }
   }, []);
-
   const saveHighScore = useCallback(async (newScore: number) => {
     try {
       await AsyncStorage.setItem(HIGH_SCORE_KEY, newScore.toString());
       setHighScore(newScore);
     } catch (e) {
-      console.error("Failed to save high score.", e);
+      console.error("HS Save Err", e);
     }
   }, []);
-
   useEffect(() => {
     loadHighScore();
   }, [loadHighScore]);
-
+  const updatePaddleCurrentXState = useCallback((newX: number) => {
+    setPaddleCurrentX(newX);
+  }, []);
   useEffect(() => {
-    const subscription = AppState.addEventListener("change", (nextAppState) => {
+    const sub = AppState.addEventListener("change", (nextAppState) => {
       if (
         appState.current.match(/inactive|background/) &&
         nextAppState === "active"
       ) {
-        // App has come to the foreground
       } else if (
         nextAppState.match(/inactive|background/) &&
         isGameActive &&
         !isGameOver
       ) {
+        paddleOffsetX.value = paddleXShared.value;
         runOnJS(setIsGameActive)(false);
       }
       appState.current = nextAppState;
     });
+    return () => sub.remove();
+  }, [isGameActive, isGameOver, paddleXShared, paddleOffsetX]);
+  const incrementScore = useCallback(() => setScore((s) => s + 1), []);
 
-    return () => {
-      subscription.remove();
-    };
-  }, [isGameActive, isGameOver]);
+  const calculateInitialPositions = useCallback(
+    (
+      dimensions: GameAreaDimensions
+    ): {
+      ballPos: { x: number; y: number };
+      initialPaddleXVisual: number;
+      initialPaddleXLogic: number;
+    } | null => {
+      if (!dimensions) {
+        console.warn("[RBC] calculateInitialPositions: no dimensions!");
+        return null;
+      }
+      if (Platform.OS === "web") {
+        console.log(
+          `[RBC Web Debug] calculateInitialPositions: Using dimensions.width = ${dimensions.width}`
+        );
+      }
+      const ballPos = { x: dimensions.width / 2, y: dimensions.height / 3 };
+      const initialPaddleXVisual = dimensions.width / 2 - PADDLE_WIDTH / 2;
+      const initialPaddleXLogic = initialPaddleXVisual + PADDLE_WIDTH / 2;
+      if (Platform.OS === "web") {
+        console.log(
+          `[RBC Web Debug] calculateInitialPositions: Calculated initialPVisual=${initialPaddleXVisual}, initialPLogic=${initialPaddleXLogic}`
+        );
+      }
+      return { ballPos, initialPaddleXVisual, initialPaddleXLogic };
+    },
+    []
+  );
 
-  const updatePaddleCurrentXState = useCallback((newX: number) => {
-    setPaddleCurrentX(newX);
-  }, []);
+  // --- onLayoutGameArea MODIFIED ---
+  const onLayoutGameArea = useCallback(
+    (event: LayoutChangeEvent) => {
+      const { x, y, width, height } = event.nativeEvent.layout;
+      if (Platform.OS === "web") {
+        console.log(
+          `[RBC Web Debug] onLayoutGameArea: Event layout width = ${width}, height = ${height}`
+        );
+      }
+      const currentLayoutDimensions = { x, y, width, height };
+      setGameAreaDimensions(currentLayoutDimensions); // Always update state
 
-  const incrementScore = useCallback(() => {
-    setScore((prevScore) => prevScore + 1);
-  }, []);
+      if (!hasLayoutBeenSet) {
+        // For the first layout, set up React state and initial game state.
+        // The actual shared value for paddleXShared for web will be set in the useEffect below.
+        const positions = calculateInitialPositions(currentLayoutDimensions);
+        if (!positions) return;
 
-  const setupInitialPositions = useCallback(
-    (currentGamedimensions: GameAreaDimensions) => {
-      setBallPosition({
-        x: currentGamedimensions.width / 2,
-        y: currentGamedimensions.height / 3,
-      });
+        setBallPosition(positions.ballPos);
+        setBallVelocity({
+          dx: (Math.random() > 0.5 ? 1 : -1) * INITIAL_BALL_SPEED_X,
+          dy: INITIAL_BALL_SPEED_Y,
+        });
+        runOnJS(updatePaddleCurrentXState)(positions.initialPaddleXLogic); // Set logical center
+        // paddleXShared.value will be set by the useEffect for web, or directly here for native
+        if (Platform.OS !== "web") {
+          paddleXShared.value = positions.initialPaddleXVisual;
+          paddleOffsetX.value = positions.initialPaddleXVisual;
+        }
+        paddleScale.value = 1;
+
+        setIsGameActive(false);
+        setIsGameOver(false);
+        setHasLayoutBeenSet(true); // This will trigger the web-specific useEffect
+      } else {
+        // Subsequent layouts (e.g., resize)
+        if (!isGameActive && !isGameOver) {
+          const positions = calculateInitialPositions(currentLayoutDimensions);
+          if (!positions) return;
+          setBallPosition(positions.ballPos);
+          // Re-set paddle shared values directly here for subsequent non-active setups on all platforms
+          paddleXShared.value = positions.initialPaddleXVisual;
+          paddleOffsetX.value = positions.initialPaddleXVisual;
+          runOnJS(updatePaddleCurrentXState)(positions.initialPaddleXLogic);
+        }
+      }
+    },
+    [
+      hasLayoutBeenSet,
+      calculateInitialPositions,
+      isGameActive,
+      isGameOver,
+      updatePaddleCurrentXState,
+      paddleXShared, // Added as it's written to
+      paddleOffsetX, // Added as it's written to
+      paddleScale, // Added as it's written to
+    ]
+  );
+
+  // --- NEW useEffect for WEB initial paddle position HACK ---
+  useEffect(() => {
+    if (
+      Platform.OS === "web" &&
+      hasLayoutBeenSet &&
+      gameAreaDimensions &&
+      !isGameActive &&
+      !isGameOver
+    ) {
+      // This runs once after the first layout is set and gameAreaDimensions are available.
+      const positions = calculateInitialPositions(gameAreaDimensions);
+      if (positions) {
+        console.log(
+          `[RBC Web Debug] useEffect (WEB HACK): Attempting to set paddleXShared.value = ${positions.initialPaddleXVisual} after a frame.`
+        );
+        // Defer the shared value update slightly
+        requestAnimationFrame(() => {
+          // rAF is now the globally defined one
+          paddleXShared.value = positions.initialPaddleXVisual;
+          paddleOffsetX.value = positions.initialPaddleXVisual; // Also set offset
+          console.log(
+            `[RBC Web Debug] useEffect (WEB HACK): paddleXShared.value is NOW ${paddleXShared.value}`
+          );
+        });
+      }
+    }
+  }, [
+    hasLayoutBeenSet,
+    gameAreaDimensions,
+    isGameActive,
+    isGameOver,
+    calculateInitialPositions,
+    paddleXShared, // Added as it's written to
+    paddleOffsetX, // Added as it's written to
+  ]); // Dependencies
+
+  const startGame = useCallback(() => {
+    if (gameAreaDimensions) {
+      const positions = calculateInitialPositions(gameAreaDimensions);
+      if (!positions) return;
+      const { ballPos, initialPaddleXVisual, initialPaddleXLogic } = positions;
+      setBallPosition(ballPos);
       setBallVelocity({
         dx: (Math.random() > 0.5 ? 1 : -1) * INITIAL_BALL_SPEED_X,
         dy: INITIAL_BALL_SPEED_Y,
       });
-      const initialPaddleX = currentGamedimensions.width / 2 - PADDLE_WIDTH / 2;
-      paddleXShared.value = initialPaddleX;
-      paddleOffsetX.value = initialPaddleX;
-      runOnJS(updatePaddleCurrentXState)(initialPaddleX + PADDLE_WIDTH / 2);
+      paddleXShared.value = initialPaddleXVisual; // Set directly on start for all platforms
+      paddleOffsetX.value = initialPaddleXVisual;
+      runOnJS(updatePaddleCurrentXState)(initialPaddleXLogic);
       paddleScale.value = 1;
-    },
-    [paddleXShared, paddleOffsetX, updatePaddleCurrentXState, paddleScale]
-  );
-
-  const startGame = useCallback(() => {
-    if (gameAreaDimensions) {
-      setupInitialPositions(gameAreaDimensions);
       setScore(0);
       setIsGameOver(false);
       setIsGameActive(true);
     }
-  }, [gameAreaDimensions, setupInitialPositions]);
+  }, [
+    gameAreaDimensions,
+    calculateInitialPositions,
+    updatePaddleCurrentXState,
+    paddleXShared,
+    paddleOffsetX,
+    paddleScale,
+  ]);
 
-  const playSound = useCallback(async (soundObject: Audio.Sound | null) => {
-    if (soundObject) {
+  const playSound = useCallback(async (sound: Audio.Sound | null) => {
+    if (sound)
       try {
-        await soundObject.replayAsync();
+        await sound.replayAsync();
       } catch (e) {
-        console.warn("Error playing sound", e);
+        console.warn("Err play sound", e);
       }
-    }
   }, []);
-
   const handleGameOver = useCallback(() => {
     setIsGameActive(false);
     setIsGameOver(true);
     if (gameOverSound.current) runOnJS(playSound)(gameOverSound.current);
-    if (score > highScore) {
-      saveHighScore(score);
-    }
+    if (score > highScore) saveHighScore(score);
   }, [score, highScore, saveHighScore, playSound]);
-
-  const onLayoutGameArea = useCallback(
-    (event: LayoutChangeEvent) => {
-      const { x, y, width, height } = event.nativeEvent.layout;
-      const currentGamedimensions = { x, y, width, height };
-      setGameAreaDimensions(currentGamedimensions);
-
-      if (!hasLayoutBeenSet) {
-        const initialPaddleX =
-          currentGamedimensions.width / 2 - PADDLE_WIDTH / 2;
-        paddleXShared.value = initialPaddleX;
-        paddleOffsetX.value = initialPaddleX;
-        runOnJS(updatePaddleCurrentXState)(initialPaddleX + PADDLE_WIDTH / 2);
-
-        setupInitialPositions(currentGamedimensions);
-        setIsGameActive(false);
-        setIsGameOver(false);
-        setHasLayoutBeenSet(true);
-      }
-    },
-    [
-      setupInitialPositions,
-      hasLayoutBeenSet,
-      paddleXShared,
-      paddleOffsetX,
-      updatePaddleCurrentXState,
-    ]
-  );
-
   useEffect(() => {
     const loadSounds = async () => {
       if (soundsLoaded.current) return;
-      console.log("Attempting to load sounds with expo-av...");
-
-      if (
-        !Audio ||
-        !Audio.Sound ||
-        typeof Audio.Sound.createAsync !== "function" ||
-        !Audio.setAudioModeAsync ||
-        !InterruptionModeIOS ||
-        !InterruptionModeAndroid
-      ) {
-        console.error(
-          "One or more critical Audio components from expo-av are undefined. Check expo-av installation/version and imports."
-        );
-        if (!Audio)
-          console.error("Audio (default import from expo-av) is undefined");
-        if (Audio && !Audio.Sound)
-          console.error("Audio.Sound (class from expo-av) is undefined");
-        if (
-          Audio &&
-          Audio.Sound &&
-          typeof Audio.Sound.createAsync !== "function"
-        ) {
-          console.error(
-            "Audio.Sound.createAsync (static method from expo-av) is undefined or not a function"
-          );
-        }
-        if (Audio && !Audio.setAudioModeAsync)
-          console.error(
-            "Audio.setAudioModeAsync (static method from expo-av) is undefined"
-          );
-        if (!InterruptionModeIOS)
-          console.error(
-            "InterruptionModeIOS (named import from expo-av) is undefined"
-          );
-        if (!InterruptionModeAndroid)
-          console.error(
-            "InterruptionModeAndroid (named import from expo-av) is undefined"
-          );
-        return;
-      }
-
       try {
+        if (
+          !Audio ||
+          !Audio.Sound ||
+          typeof Audio.Sound.createAsync !== "function" ||
+          !Audio.setAudioModeAsync ||
+          !InterruptionModeIOS ||
+          !InterruptionModeAndroid
+        ) {
+          console.error("Audio components missing");
+          return;
+        }
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: false,
           playsInSilentModeIOS: true,
@@ -281,54 +351,34 @@ export default function GameScreen() {
           shouldDuckAndroid: true,
           playThroughEarpieceAndroid: false,
         });
-
         const bounceAsset = require("../../assets/sounds/bounce-8111.mp3");
         const gameOverAsset = require("../../assets/sounds/game-over-arcade-6435.mp3");
-
-        if (!bounceAsset) {
-          console.error("Failed to require bounce-8111.mp3");
+        if (!bounceAsset || !gameOverAsset) {
+          console.error("Failed to require sound assets.");
           return;
         }
-        if (!gameOverAsset) {
-          console.error("Failed to require game-over-arcade-6435.mp3");
-          return;
-        }
-
         const { sound: bounceS } = await Audio.Sound.createAsync(bounceAsset);
         bounceSound.current = bounceS;
-
         const { sound: gameOverS } = await Audio.Sound.createAsync(
           gameOverAsset
         );
         gameOverSound.current = gameOverS;
-
         soundsLoaded.current = true;
-        console.log("Sounds loaded successfully with expo-av.");
       } catch (error) {
-        console.error("Failed to load sounds with expo-av.", error);
+        console.error("Failed to load sounds", error);
       }
     };
-
     loadSounds();
-
     return () => {
-      if (bounceSound.current) {
-        bounceSound.current
-          .unloadAsync()
-          .catch((e: any) => console.warn("Error unloading bounce sound", e));
-      }
-      if (gameOverSound.current) {
-        gameOverSound.current
-          .unloadAsync()
-          .catch((e: any) =>
-            console.warn("Error unloading game over sound", e)
-          );
-      }
+      bounceSound.current
+        ?.unloadAsync()
+        .catch((e) => console.warn("unload b", e));
+      gameOverSound.current
+        ?.unloadAsync()
+        .catch((e) => console.warn("unload go", e));
       soundsLoaded.current = false;
-      console.log("Sounds unloaded (expo-av).");
     };
   }, []);
-
   const panGesture = Gesture.Pan()
     .onUpdate((event) => {
       if (!isGameActive || isGameOver || !gameAreaDimensions) return;
@@ -338,19 +388,16 @@ export default function GameScreen() {
         Math.min(newX, gameAreaDimensions.width - PADDLE_WIDTH)
       );
       paddleXShared.value = clampedX;
-      runOnJS(updatePaddleCurrentXState)(
-        paddleXShared.value + PADDLE_WIDTH / 2
-      );
+      runOnJS(updatePaddleCurrentXState)(clampedX + PADDLE_WIDTH / 2);
     })
     .onEnd(() => {
-      if (!isGameActive || isGameOver) return;
+      if (!gameAreaDimensions) return; // Added safety check
       paddleOffsetX.value = paddleXShared.value;
       runOnJS(updatePaddleCurrentXState)(
         paddleXShared.value + PADDLE_WIDTH / 2
       );
     })
     .enabled(isGameActive && !isGameOver);
-
   const animatedPaddleStyle = useAnimatedStyle(() => {
     return {
       transform: [
@@ -359,25 +406,20 @@ export default function GameScreen() {
       ],
     };
   });
-
   useEffect(() => {
     if (!isGameActive || !ballPosition || !gameAreaDimensions || isGameOver) {
-      if (animationFrameId.current) {
+      if (animationFrameId.current)
         cancelAnimationFrame(animationFrameId.current);
-        animationFrameId.current = null;
-      }
+      animationFrameId.current = null;
       return;
     }
-
     const gameLoop = () => {
       setBallPosition((prevPos) => {
-        if (!prevPos) return null;
-
-        let newX = prevPos.x + ballVelocity.dx;
-        let newY = prevPos.y + ballVelocity.dy;
-        let newDx = ballVelocity.dx;
-        let newDy = ballVelocity.dy;
-
+        if (!prevPos || !gameAreaDimensions) return prevPos;
+        let newX = prevPos.x + ballVelocity.dx,
+          newY = prevPos.y + ballVelocity.dy;
+        let newDx = ballVelocity.dx,
+          newDy = ballVelocity.dy;
         if (newY - BALL_RADIUS < 0) {
           newY = BALL_RADIUS;
           newDy = -newDy;
@@ -393,50 +435,48 @@ export default function GameScreen() {
           newDx = -newDx;
           if (bounceSound.current) runOnJS(playSound)(bounceSound.current);
         }
-
         const paddleTopY =
           gameAreaDimensions.height - PADDLE_Y_OFFSET - PADDLE_HEIGHT;
-        const paddleLeftXGameLogic = paddleCurrentX - PADDLE_WIDTH / 2;
-        const paddleRightXGameLogic = paddleCurrentX + PADDLE_WIDTH / 2;
-
+        const paddleLeftX_logic = paddleCurrentX - PADDLE_WIDTH / 2;
+        const paddleRightX_logic = paddleCurrentX + PADDLE_WIDTH / 2;
         if (
           newDy > 0 &&
           newY + BALL_RADIUS >= paddleTopY &&
           prevPos.y + BALL_RADIUS < paddleTopY &&
-          newX + BALL_RADIUS >= paddleLeftXGameLogic &&
-          newX - BALL_RADIUS <= paddleRightXGameLogic
+          newX + BALL_RADIUS >= paddleLeftX_logic &&
+          newX - BALL_RADIUS <= paddleRightX_logic
         ) {
           newY = paddleTopY - BALL_RADIUS;
           newDy = -newDy;
           runOnJS(incrementScore)();
           if (bounceSound.current) runOnJS(playSound)(bounceSound.current);
           paddleScale.value = withSequence(
-            withTiming(1.2, { duration: 50 }),
-            withTiming(1, { duration: 100 })
+            withTiming(1.25, { duration: 60 }),
+            withTiming(1, { duration: 120 })
           );
-          const hitPositionOnPaddle =
-            (newX - paddleLeftXGameLogic) / PADDLE_WIDTH;
-          const influenceFactor = 2;
-          newDx += (hitPositionOnPaddle - 0.5) * influenceFactor;
+          const hitPos = (newX - paddleLeftX_logic) / PADDLE_WIDTH;
+          newDx += (hitPos - 0.5) * 2.5;
           newDx = Math.max(
-            -Math.abs(INITIAL_BALL_SPEED_X * 1.5),
-            Math.min(Math.abs(INITIAL_BALL_SPEED_X * 1.5), newDx)
+            -Math.abs(INITIAL_BALL_SPEED_X * 1.8),
+            Math.min(Math.abs(INITIAL_BALL_SPEED_X * 1.8), newDx)
           );
+          if (Math.abs(newDy) < Math.abs(INITIAL_BALL_SPEED_Y * 0.8))
+            newDy =
+              newDy > 0
+                ? Math.abs(INITIAL_BALL_SPEED_Y * 0.8)
+                : -Math.abs(INITIAL_BALL_SPEED_Y * 0.8);
         }
-
         if (newY - BALL_RADIUS > gameAreaDimensions.height) {
           runOnJS(handleGameOver)();
           return prevPos;
         }
-
-        if (newDx !== ballVelocity.dx || newDy !== ballVelocity.dy) {
+        if (newDx !== ballVelocity.dx || newDy !== ballVelocity.dy)
           setBallVelocity({ dx: newDx, dy: newDy });
-        }
         return { x: newX, y: newY };
       });
-      animationFrameId.current = requestAnimationFrame(gameLoop);
+      animationFrameId.current = requestAnimationFrame(gameLoop); // Use imported rAF (now globally defined)
     };
-    animationFrameId.current = requestAnimationFrame(gameLoop);
+    animationFrameId.current = requestAnimationFrame(gameLoop); // Use imported rAF (now globally defined)
     return () => {
       if (animationFrameId.current)
         cancelAnimationFrame(animationFrameId.current);
@@ -452,82 +492,163 @@ export default function GameScreen() {
     paddleScale,
     handleGameOver,
     playSound,
+    // rAF, // rAF is stable, not needed in deps
   ]);
 
   const renderGameOverlay = () => {
-    if (!gameAreaDimensions || !hasLayoutBeenSet) {
+    if (!gameAreaDimensions || !hasLayoutBeenSet)
       return (
-        <ThemedText style={styles.gameAreaText}>
-          Loading Game Area...
+        <ThemedText
+          style={[
+            styles.gameAreaText,
+            { color: overlayTextColor, fontFamily: GAME_FONT_FAMILY },
+          ]}
+        >
+          LOADING ARCADE...
         </ThemedText>
       );
-    }
-    if (isGameOver) {
+    if (isGameOver)
       return (
-        <View style={styles.overlayContainer}>
-          <ThemedText type="title" style={{ color: overlayTextColor }}>
-            Game Over
+        <Animated.View style={[styles.overlayContainer, animatedGameOverStyle]}>
+          <ThemedText
+            type="title"
+            style={[styles.overlayTitleText, { color: ballColor }]}
+          >
+            GAME OVER
           </ThemedText>
           <ThemedText
             type="subtitle"
-            style={{ color: overlayTextColor, marginVertical: 5 }}
+            style={[styles.overlayInfoText, { color: overlayTextColor }]}
           >
             Final Score: {score}
           </ThemedText>
           <ThemedText
             type="defaultSemiBold"
-            style={{ color: overlayTextColor, marginBottom: 10 }}
+            style={[
+              styles.overlayInfoText,
+              { color: scoreHeaderColor, marginBottom: 20 },
+            ]}
           >
             High Score: {highScore}
           </ThemedText>
-          <Button title="Restart Game" onPress={startGame} />
-        </View>
+          {/* TS ERROR FIX: Dynamic styles for restart button applied here */}
+          <TouchableOpacity
+            onPress={startGame}
+            style={[
+              styles.restartButton,
+              {
+                borderColor: restartButtonBorderColor,
+                backgroundColor: restartButtonBackgroundColor,
+              },
+              Platform.OS === "web"
+                ? { boxShadow: `0 0 6px ${restartButtonBorderColor}` }
+                : {
+                    shadowColor: restartButtonBorderColor,
+                    shadowOffset: { width: 0, height: 0 },
+                    shadowOpacity: 0.9,
+                    shadowRadius: 6,
+                    elevation: 6,
+                  },
+            ]}
+            activeOpacity={0.7}
+          >
+            <ThemedText
+              style={[
+                styles.restartButtonText,
+                { color: restartButtonTextColor },
+              ]}
+            >
+              RESTART
+            </ThemedText>
+          </TouchableOpacity>
+        </Animated.View>
       );
-    }
-    if (!isGameActive) {
+    if (!isGameActive)
       return (
         <TouchableOpacity
           style={styles.overlayContainer}
           onPress={startGame}
           activeOpacity={0.7}
         >
-          <ThemedText type="title" style={{ color: overlayTextColor }}>
-            Tap to Start
-          </ThemedText>
+          <Animated.View style={animatedTapToStartStyle}>
+            <ThemedText
+              type="title"
+              style={[styles.overlayTitleText, { color: overlayTextColor }]}
+            >
+              TAP TO START
+            </ThemedText>
+          </Animated.View>
           {highScore > 0 && (
             <ThemedText
               type="defaultSemiBold"
-              style={{ color: overlayTextColor, marginTop: 10 }}
+              style={[
+                styles.overlayInfoText,
+                { color: scoreHeaderColor, marginTop: 15 },
+              ]}
             >
               High Score: {highScore}
             </ThemedText>
           )}
         </TouchableOpacity>
       );
-    }
     return null;
   };
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemedView style={styles.screenContainer}>
+      <ThemedView
+        style={[
+          styles.screenContainer,
+          { backgroundColor: gameScreenBackgroundColor },
+        ]}
+      >
         <View style={styles.headerContainer}>
-          <ThemedText type="title" style={styles.title}>
+          <ThemedText
+            type="title"
+            style={[styles.title, { color: titleColor }]}
+          >
             Red Ball Classic
           </ThemedText>
-          {gameAreaDimensions && isGameActive && !isGameOver && (
-            <ThemedText
-              type="subtitle"
-              style={[styles.scoreText, { color: scoreTextColor }]}
-            >
-              Score: {score}
-            </ThemedText>
+          {gameAreaDimensions && (isGameActive || isGameOver) && (
+            <View style={styles.scoreContainer}>
+              <ThemedText
+                type="subtitle"
+                style={[styles.scoreLabel, { color: scoreHeaderColor }]}
+              >
+                SCORE:
+              </ThemedText>
+              <ThemedText
+                type="subtitle"
+                style={[styles.scoreValue, { color: overlayTextColor }]}
+              >
+                {score}
+              </ThemedText>
+            </View>
           )}
         </View>
-
         <View
-          style={[styles.gameArea, { borderColor: gameAreaBorderColor }]}
+          style={[
+            styles.gameArea,
+            {
+              borderColor: gameAreaBorderColor,
+              backgroundColor: gameAreaBackgroundColor,
+              ...(Platform.OS === "web"
+                ? { boxShadow: `0 0 8px ${gameAreaBorderColor}` }
+                : {
+                    shadowColor: gameAreaBorderColor,
+                    shadowOffset: { width: 0, height: 0 },
+                    shadowOpacity: 0.8,
+                    shadowRadius: 8,
+                    elevation: 10,
+                  }),
+              width:
+                Platform.OS === "web"
+                  ? WEB_GAME_AREA_WIDTH
+                  : gameAreaDimensions?.width || SCREEN_WIDTH - 20,
+            },
+          ]}
           onLayout={onLayoutGameArea}
+          pointerEvents={Platform.OS === "web" ? "box-none" : "auto"}
         >
           {gameAreaDimensions && hasLayoutBeenSet && !isGameOver && (
             <>
@@ -537,6 +658,15 @@ export default function GameScreen() {
                     styles.ball,
                     {
                       backgroundColor: ballColor,
+                      ...(Platform.OS === "web"
+                        ? { boxShadow: `0 0 10px ${ballColor}` }
+                        : {
+                            shadowColor: ballColor,
+                            shadowOffset: { width: 0, height: 0 },
+                            shadowOpacity: 1,
+                            shadowRadius: 10,
+                            elevation: 8,
+                          }),
                       left: ballPosition.x - BALL_RADIUS,
                       top: ballPosition.y - BALL_RADIUS,
                     },
@@ -547,7 +677,19 @@ export default function GameScreen() {
                 <Animated.View
                   style={[
                     styles.paddleBase,
-                    { backgroundColor: paddleColor, bottom: PADDLE_Y_OFFSET },
+                    {
+                      backgroundColor: paddleColor,
+                      ...(Platform.OS === "web"
+                        ? { boxShadow: `0 0 10px ${paddleColor}` }
+                        : {
+                            shadowColor: paddleColor,
+                            shadowOffset: { width: 0, height: 0 },
+                            shadowOpacity: 1,
+                            shadowRadius: 10,
+                            elevation: 8,
+                          }),
+                      bottom: PADDLE_Y_OFFSET,
+                    },
                     animatedPaddleStyle,
                   ]}
                 />
@@ -556,49 +698,75 @@ export default function GameScreen() {
           )}
           {renderGameOverlay()}
         </View>
+        {hasLayoutBeenSet && highScore > 0 && !isGameActive && !isGameOver && (
+          <View style={styles.footerHighScoreContainer}>
+            <ThemedText
+              style={[styles.footerHighScoreText, { color: scoreHeaderColor }]}
+            >
+              HIGH SCORE: {highScore}
+            </ThemedText>
+          </View>
+        )}
       </ThemedView>
     </GestureHandlerRootView>
   );
 }
 
+// Styles
 const styles = StyleSheet.create({
   screenContainer: {
     flex: 1,
-    alignItems: "center", // Center children horizontally
-    justifyContent: "center", // Center children vertically
-    paddingTop: Platform.OS === "web" ? 20 : 30, // Slightly less paddingTop for web if needed
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: Platform.OS === "web" ? 20 : 40,
     paddingHorizontal: 10,
   },
   headerContainer: {
     width: "100%",
-    // --- For web, ensure header doesn't push game area too much if game area is fixed ---
-    // You might want to make this position: 'absolute', top: 0 for web,
-    // or ensure it's part of the centered content.
-    // For simplicity now, let's keep it flow, but adjust if it causes layout issues on web.
-    maxWidth: Platform.OS === "web" ? WEB_GAME_AREA_WIDTH : undefined, // Constrain header width on web
+    maxWidth: Platform.OS === "web" ? WEB_GAME_AREA_WIDTH + 20 : undefined,
     alignItems: "center",
-    marginBottom: 10,
-    minHeight: 60, // Keep minHeight
+    marginBottom: 15,
+    minHeight: 70,
   },
-  title: {},
-  scoreText: { marginTop: 5, fontSize: 20 },
+  title: {
+    fontSize: 36,
+    fontFamily: GAME_FONT_FAMILY,
+    fontWeight: "bold",
+    letterSpacing: 1,
+    ...(Platform.OS === "web"
+      ? { textShadow: `1px 1px 3px rgba(0,0,0,0.5)` }
+      : {
+          textShadowColor: "rgba(0, 0, 0, 0.5)",
+          textShadowOffset: { width: 1, height: 1 },
+          textShadowRadius: 3,
+        }),
+  },
+  scoreContainer: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "baseline",
+  },
+  scoreLabel: { fontFamily: GAME_FONT_FAMILY, fontSize: 20, marginRight: 8 },
+  scoreValue: {
+    fontFamily: GAME_FONT_FAMILY,
+    fontSize: 24,
+    fontWeight: "bold",
+  },
   gameArea: {
-    // --- Adjust width based on platform ---
-    width: Platform.OS === "web" ? WEB_GAME_AREA_WIDTH : SCREEN_WIDTH - 20,
-    aspectRatio: GAME_ASPECT_RATIO_VALUE, // Use the defined aspect ratio
-    borderWidth: 2,
+    width: Platform.OS === "web" ? WEB_GAME_AREA_WIDTH : SCREEN_WIDTH - 20, // SCREEN_WIDTH here is module-level, consider if it should be dynamic for native if screen can rotate/change
+    aspectRatio: GAME_ASPECT_RATIO_VALUE,
+    borderWidth: 3,
+    borderRadius: 10,
     overflow: "hidden",
     position: "relative",
-    // justifyContent and alignItems for content *inside* gameArea (like the overlay)
     justifyContent: "center",
     alignItems: "center",
-    // --- Add a max height for web as a safeguard, though aspectRatio should control it ---
     maxHeight:
       Platform.OS === "web"
         ? WEB_GAME_AREA_WIDTH / GAME_ASPECT_RATIO_VALUE + 50
         : undefined,
   },
-  gameAreaText: { fontSize: 16, textAlign: "center" },
+  gameAreaText: { fontSize: 18, textAlign: "center", fontWeight: "bold" },
   overlayContainer: {
     position: "absolute",
     top: 0,
@@ -607,8 +775,29 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.3)",
+    backgroundColor: "rgba(10, 10, 20, 0.85)",
     zIndex: 10,
+    padding: 20,
+  },
+  overlayTitleText: {
+    fontSize: 32,
+    fontFamily: GAME_FONT_FAMILY,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 10,
+    ...(Platform.OS === "web"
+      ? { textShadow: `2px 2px 5px rgba(0,0,0,0.7)` }
+      : {
+          textShadowColor: "rgba(0, 0, 0, 0.7)",
+          textShadowOffset: { width: 2, height: 2 },
+          textShadowRadius: 5,
+        }),
+  },
+  overlayInfoText: {
+    fontSize: 20,
+    fontFamily: GAME_FONT_FAMILY,
+    textAlign: "center",
+    marginVertical: 5,
   },
   ball: {
     position: "absolute",
@@ -620,5 +809,31 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: PADDLE_WIDTH,
     height: PADDLE_HEIGHT,
+    borderRadius: 5,
+  },
+  restartButton: {
+    // TS ERROR FIX: Removed platform-specific shadows that used component-scope variables
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 8,
+    borderWidth: 2,
+    marginTop: 25,
+  },
+  restartButtonText: {
+    fontSize: 20,
+    fontFamily: GAME_FONT_FAMILY,
+    textAlign: "center",
+    fontWeight: "bold",
+    letterSpacing: 1,
+  },
+  footerHighScoreContainer: {
+    position: "absolute",
+    bottom: Platform.OS === "ios" ? 30 : 20,
+    alignSelf: "center",
+  },
+  footerHighScoreText: {
+    fontFamily: GAME_FONT_FAMILY,
+    fontSize: 16,
+    opacity: 0.7,
   },
 });
