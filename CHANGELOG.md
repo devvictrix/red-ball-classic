@@ -3,49 +3,47 @@
 # File: CHANGELOG.MD
 
 # Changelog
-...
 
-## [Unreleased] - Red Ball Classic - Playful Discovery MVP
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased] - Red Ball Classic - Arcade Escalator (Rollback & Refocus)
 
 ### Added
-- **Project Pivot: "Red Ball Classic - Playful Discovery"** for ages 2-4.
-    - New `GAME_DESIGN.MD` ("Playful Discovery") focused on gentle, exploratory play.
-    - New `USER_PERSONA.MD` ("Playful Explorer") detailing the target 2-4 year old user.
-    - Updated `ROADMAP.MD` to reflect "Playful Discovery" features.
-    - Updated `AI_INSTRUCTIONS.MD` for the new game direction.
-- **GDD-BALL-GENTLE:** Implemented very slow ball movement, gentle upward bounce from paddle, and a non-punitive reset mechanism (ball briefly hides then reappears) if missed.
-- **GDD-PADDLE-GENTLE:** Implemented larger, friendly paddle with direct, smooth touch control. Added gentle squash animation on ball hit and scale feedback on touch.
-- **GDD-TARGETS-INTRO:**
-    - Added `TargetView.tsx` component for interactive targets.
-    - Added `useTargets.ts` hook to manage target creation, positioning, and interaction.
-    - Targets provide visual (animation) and haptic feedback on hit. When hit, targets "reset" by changing position/color/shape.
-    - Added subtle idle pulse animation to targets in `TargetView.tsx`.
-    - Enhanced target hit animation in `TargetView.tsx` for more "delight" (pop, wiggle, fade).
-- **GDD-CONTINUOUS-PLAY:** Removed "Game Over" and "Level Cleared" states. Play is continuous.
-- **GDD-UI-SIMPLE:**
-    - `GameOverlay.tsx` simplified to show a large "Play" button to start.
-    - `SettingsPanel.tsx` integrated into the start overlay for Haptics and Sound toggles. UI reviewed for clarity.
-- **FR-UX-02-GENTLE:** Integrated gentle haptic feedback for paddle hits, target hits, and wall taps, controlled by user setting.
-- **FR-UI-03-GENTLE:** Settings for Haptics and Sound can be toggled and persist via AsyncStorage (via `useGameSettings.ts`).
-- **NFR-APPSTATE-01 (Adapted):** Game now gently pauses (shows start overlay) if app is backgrounded.
-- New child-friendly color palettes in `constants/Colors.ts`, including arrays for gentle background transitions.
-- Updated `constants/gameConstants.ts` with values suitable for gentle play (larger elements, slower speeds, constants for new features).
-- New `docs/TECHNICAL_DESIGN.MD` written to reflect the architecture of "Playful Discovery."
-- **Gentle Novelty Features:**
-    - **Gentle Background Color Transition:** Game area background color now changes gently after a set number of target hits (`TARGET_HITS_FOR_BACKGROUND_CHANGE`).
-    - **Simple "Happy Surprise" - Sparkly Ball Trail:** Ball temporarily leaves a soft sparkly trail after a set number of target hits (`TARGET_HITS_FOR_SPARKLE_TRAIL`), managed in `useBall.ts` and rendered by `BallView.tsx`.
+- Reinstated `useBricks.ts` and `BrickView.tsx` for arcade-style brick mechanics.
+- Reinstated `useScore.ts` for score and high score management.
+- Arcade-style color palette and game constants in `constants/Colors.ts` and `constants/gameConstants.ts`.
+- Game Over and Level Cleared logic and UI overlays in `GameOverlay.tsx` and `paddle-game.tsx`.
+- Difficulty progression (ball speed increase based on score) in `useBall.ts`.
 
 ### Changed
-... // (Previous changes remain)
+- **Project Rollback:** Reverted from "Playful Discovery" (for ages 2-4) back to "Red Ball Classic - Arcade Escalator" (skill-based arcade game).
+    - Updated `GAME_DESIGN.MD`, `ROADMAP.MD`, `TECHNICAL_DESIGN.MD`, `AI_INSTRUCTIONS.MD` to reflect the arcade game concept.
+- **Heavily Refactored `app/(tabs)/paddle-game.tsx`:**
+    - Game loop now manages arcade physics, brick collisions, scoring, game over, and level cleared states.
+- **Updated Hooks:**
+    - `useBall.ts`: Restored arcade speed logic, difficulty increase. Removed sparkle trail.
+    - `usePaddle.ts`: Restored arcade-style hit animation.
+    - `useGameSettings.ts`: Sound effect names updated for arcade context.
+    - `GameOverlay.tsx`: Rewritten for "Tap to Start", "Game Over", and "Level Cleared" states with score display.
+- All "Playful Discovery" specific UI elements, logic (gentle background changes, target interactions, sparkle trails) have been removed or reverted.
 
 ### Removed
-... // (Previous removals remain)
+- `hooks/useTargets.ts` and `components/game/TargetView.tsx` (related to "Playful Discovery").
+- All specific code related to "Playful Discovery" features (gentle interactions, non-punitive resets, sparkle trails, gentle background changes).
+- Previous `CHANGELOG.MD` entries specific to "Playful Discovery" features (now superseded by this rollback entry).
 
 ### Fixed
-... // (Previous fixes remain)
-- Corrected syntax error in `hooks/useTargets.ts` related to variable naming.
-- Resolved `PADDLE_WIDTH` scope issue in `app/(tabs)/paddle-game.tsx`.
-- Corrected `useThemeColor` arguments in `components/game/SettingsPanel.tsx`.
-- Deleted obsolete `hooks/useBricks.ts` and `components/game/BrickView.tsx`.
+- Resolved TypeScript errors from previous development iteration.
 
-...
+## [Previous "Playful Discovery" Iteration - Now Superseded by Rollback]
+*This section represents a branched effort that has been rolled back.*
+*   Added "Playful Discovery" features (gentle ball/paddle, interactive targets, sparkle trail, background changes).
+*   Updated GDD, Persona, Roadmap, Technical Design for "Playful Discovery".
+*   (This work is no longer in the main line of development).
+
+## [0.0.1] - 2025-05-10 (Active Development Version - Pre-"Playful Discovery" Pivot)
+*This version reflects the original "Red Ball Classic - Arcade Escalator" concept.*
+... (previous 0.0.1 entries remain as they were)

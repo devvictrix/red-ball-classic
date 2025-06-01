@@ -1,29 +1,30 @@
 // File: constants/gameConstants.ts
 
-// --- Core Playful Discovery Constants ---
-export const BALL_RADIUS = 20;
-export const PADDLE_WIDTH = 120;
-export const PADDLE_HEIGHT = 25;
-export const PADDLE_Y_OFFSET = 70;
+export const BALL_RADIUS = 10;
+export const PADDLE_WIDTH = 100;
+export const PADDLE_HEIGHT = 15;
+export const PADDLE_Y_OFFSET = 60;
 
-// Gentle Ball Speeds
-export const INITIAL_BALL_SPEED_X_GENTLE = 1.5;
-export const INITIAL_BALL_SPEED_Y_GENTLE = -2.0;
-export const MAX_BALL_SPEED_GENTLE = 3;
+// Arcade Ball Speeds & Difficulty
+export const INITIAL_BALL_SPEED_X = 3;
+export const INITIAL_BALL_SPEED_Y = -4;
+export const MAX_BALL_SPEED_COMPONENT = 10;
+export const BASE_PADDLE_HIT_SPEED_INCREASE_FACTOR = 1.02;
+export const SCORE_THRESHOLD_FOR_SPEED_INCREASE = 100; // Score interval to increase ball speed
+export const SPEED_INCREMENT = 0.25;
 
-// Interactive Targets
-export const TARGET_SIZE_DEFAULT = 50;
-export const TARGET_PADDING = 15;
-export const TARGET_OFFSET_TOP = 60;
-export const MAX_TARGETS_ON_SCREEN = 3;
-export const TARGET_HITS_FOR_BACKGROUND_CHANGE = 5; // Every 5 total target hits
-export const TARGET_HITS_FOR_SPARKLE_TRAIL = 8; // Every 8 total target hits
-
-// Sparkle Trail
-export const SPARKLE_DURATION_MS = 3000; // 3 seconds
-export const MAX_SPARKLES = 15;
-export const SPARKLE_SIZE = 5;
-
-// Game Area & Layout
+// Game Area
 export const GAME_ASPECT_RATIO_VALUE = 3 / 4;
 export const WEB_GAME_AREA_WIDTH = 375;
+
+// Scoring
+export const SCORE_PER_PADDLE_HIT = 1;
+export const BRICK_SCORE_VALUE = 10;
+
+// --- Brick Constants (Arcade) ---
+export const BRICK_ROW_COUNT = 5;
+export const BRICK_COLUMN_COUNT = 7;
+export const BRICK_HEIGHT = 20;
+export const BRICK_PADDING = 5;
+export const BRICK_OFFSET_TOP = 50;
+export const BRICK_OFFSET_LEFT = 10;

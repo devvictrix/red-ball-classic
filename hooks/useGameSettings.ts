@@ -1,46 +1,31 @@
-// File: hooks/useGameSettings.ts
-
+// File: hooks/useGameSettings.ts (Arcade Version)
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useState } from 'react';
 
-const HAPTICS_ENABLED_KEY = '@PlayfulDiscovery:hapticsEnabled';
-const SOUND_ENABLED_KEY = '@PlayfulDiscovery:soundEnabled'; // Added for sound
+const HAPTICS_ENABLED_KEY = '@RedBallClassic:hapticsEnabled';
+const SOUND_ENABLED_KEY = '@RedBallClassic:soundEnabled';
 
 export function useGameSettings() {
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
-  const [soundEnabled, setSoundEnabled] = useState(true); // Added sound state
+  const [soundEnabled, setSoundEnabled] = useState(true); // Default to true for arcade
 
-  // Load Haptics Setting
-  const loadHapticsSetting = useCallback(async () => {
+  const loadSettings = useCallback(async () => {
     try {
-      const storedHapticsEnabled = await AsyncStorage.getItem(HAPTICS_ENABLED_KEY);
-      if (storedHapticsEnabled !== null) {
-        setHapticsEnabled(JSON.parse(storedHapticsEnabled));
-      }
-    } catch (e) {
-      console.warn("Failed to load haptics setting.", e);
-    }
-  }, []);
+      const storedHaptics = await AsyncStorage.getItem(HAPTICS_ENABLED_KEY);
+      if (storedHaptics !== null) setHapticsEnabled(JSON.parse(storedHaptics));
 
-  // Load Sound Setting
-  const loadSoundSetting = useCallback(async () => {
-    try {
-      const storedSoundEnabled = await AsyncStorage.getItem(SOUND_ENABLED_KEY);
-      if (storedSoundEnabled !== null) {
-        setSoundEnabled(JSON.parse(storedSoundEnabled));
-      }
+      const storedSound = await AsyncStorage.getItem(SOUND_ENABLED_KEY);
+      if (storedSound !== null) setSoundEnabled(JSON.parse(storedSound));
     } catch (e) {
-      console.warn("Failed to load sound setting.", e);
+      console.warn("Failed to load game settings.", e);
     }
   }, []);
 
   useEffect(() => {
-    loadHapticsSetting();
-    loadSoundSetting(); // Load sound setting on mount
-  }, [loadHapticsSetting, loadSoundSetting]);
+    loadSettings();
+  }, [loadSettings]);
 
-  // Save Haptics Setting
   const saveHapticsSetting = useCallback(async (value: boolean) => {
     try {
       await AsyncStorage.setItem(HAPTICS_ENABLED_KEY, JSON.stringify(value));
@@ -49,7 +34,6 @@ export function useGameSettings() {
     }
   }, []);
 
-  // Save Sound Setting
   const saveSoundSetting = useCallback(async (value: boolean) => {
     try {
       await AsyncStorage.setItem(SOUND_ENABLED_KEY, JSON.stringify(value));
@@ -58,14 +42,11 @@ export function useGameSettings() {
     }
   }, []);
 
-
   const toggleHaptics = useCallback(() => {
     setHapticsEnabled(prev => {
       const newValue = !prev;
       saveHapticsSetting(newValue);
-      if (newValue || prev) { // Provide feedback for the toggle itself
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
+      if (newValue) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); // Feedback for enabling
       return newValue;
     });
   }, [saveHapticsSetting]);
@@ -74,43 +55,41 @@ export function useGameSettings() {
     setSoundEnabled(prev => {
       const newValue = !prev;
       saveSoundSetting(newValue);
-      // Optionally play a very soft UI click sound here if sounds were just enabled
-      // This requires the sound system to be ready.
-      if (newValue && hapticsEnabled) { // Also provide haptic feedback for sound toggle
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
+      // Optionally play UI click sound if newValue is true and haptics enabled
+      if (newValue && hapticsEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       return newValue;
     });
   }, [saveSoundSetting, hapticsEnabled]);
 
   const triggerHapticFeedback = useCallback((
-    type: 'impactLight' | 'impactMedium' | 'notificationSuccess' // Simplified types for gentle game
+    type: 'impactLight' | 'impactMedium' | 'impactHeavy' | 'notificationSuccess' | 'notificationWarning' | 'notificationError'
     ) => {
     if (hapticsEnabled) {
       switch (type) {
         case 'impactLight': Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); break;
         case 'impactMedium': Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); break;
+        case 'impactHeavy': Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); break;
         case 'notificationSuccess': Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); break;
+        case 'notificationWarning': Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); break;
+        case 'notificationError': Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); break;
       }
     }
   }, [hapticsEnabled]);
 
-  // Placeholder for sound playback function
-  const playSoundEffect = useCallback((soundName: 'targetHit' | 'paddleTap' | 'uiClick') => {
+  // Placeholder for sound playback
+  const playSoundEffect = useCallback((soundName: 'wallHit' | 'paddleHit' | 'brickBreak' | 'gameOver' | 'levelClear' | 'uiClick') => {
     if (soundEnabled) {
-        // Actual sound playback logic would go here using expo-av
-        // e.g., targetHitSound.replayAsync();
-        console.log(`(Sound Placeholder) Playing: ${soundName}`);
+        console.log(`(Sound Placeholder - Arcade) Playing: ${soundName}`);
+        // Actual sound playback logic using expo-av would go here
     }
   }, [soundEnabled]);
-
 
   return {
     hapticsEnabled,
     toggleHaptics,
     triggerHapticFeedback,
-    soundEnabled, // Expose sound state
-    toggleSound,   // Expose sound toggle
-    playSoundEffect, // Expose sound playback
+    soundEnabled,
+    toggleSound,
+    playSoundEffect,
   };
 }
