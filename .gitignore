@@ -41,6 +41,4 @@ app-example
 # --- Project Specific ---
 # Add any files specific to *this* project that should be ignored
 consolidated_output.txt
-docs/
-specs/
 ai/
