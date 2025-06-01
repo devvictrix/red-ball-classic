@@ -5,7 +5,7 @@ import React from 'react';
 import { Platform } from 'react-native';
 
 import { HapticTab } from '@/components/HapticTab';
-import { IconSymbol, MappedIconName } from '@/components/ui/IconSymbol'; // Import MappedIconName
+import { IconSymbol } from '@/components/ui/IconSymbol'; // IconSymbol now correctly typed for MappedIconName
 import TabBarBackground from '@/components/ui/TabBarBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -35,21 +35,20 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
         }}
       />
-      {/* Game Tab for Red Ball Classic */}
-      <Tabs.Screen
-        name="game" // This will correspond to app/(tabs)/game.tsx
-        options={{
-          title: 'Game', // Or "Red Ball Classic" if preferred for tab title
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name={'gamecontroller.fill' as MappedIconName} color={color} />
-          ),
-        }}
-      />
       <Tabs.Screen
         name="explore"
         options={{
           title: 'Explore',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="paddle-game" // This should match the filename paddle-game.tsx
+        options={{
+          title: 'Paddle Game',
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="gamecontroller.fill" color={color} />
+          ),
         }}
       />
     </Tabs>
