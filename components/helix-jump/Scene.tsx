@@ -2,40 +2,45 @@ import { HELIX_JUMP_CONFIG as C } from '@/constants/helixJumpConfig';
 import type { UseHelixGameReturn } from '@/hooks/helix-jump/useHelixGame';
 import { PerspectiveCamera, Sphere } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import React, { useLayoutEffect, useMemo, useRef } from 'react';
+import React, { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 
-// Dedicated Camera Component
+// Dedicated Camera Component - CORRECTED IMPLEMENTATION
 const GameCamera = ({ ballRef }) => {
     const cameraRef = useRef<THREE.PerspectiveCamera>(null!);
+    
+    // The look-at target vector is memoized to avoid re-creation on every frame.
     const lookAtTarget = useMemo(() => new THREE.Vector3(), []);
-  
-    // This runs after the component mounts but BEFORE the first frame is painted.
-    // This is the key to fixing the bug.
-    useLayoutEffect(() => {
-      if (cameraRef.current && ballRef.current) {
-        const ballPos = ballRef.current.position;
-        const initialCameraY = ballPos.y + C.LEVEL_HEIGHT * C.CAMERA_INITIAL_Y_OFFSET_FACTOR;
-        cameraRef.current.position.set(C.CAMERA_INITIAL_X_OFFSET, initialCameraY, C.CAMERA_INITIAL_Z_POS);
-        
-        lookAtTarget.set(0, ballPos.y - C.LEVEL_HEIGHT * C.CAMERA_LOOK_AHEAD_Y_FACTOR, 0);
-        cameraRef.current.lookAt(lookAtTarget);
-      }
-    }, [ballRef, lookAtTarget]);
   
     // This hook handles the continuous following animation.
     useFrame(() => {
       if (cameraRef.current && ballRef.current) {
         const ballPos = ballRef.current.position;
+        // Calculate the smooth-dampened target Y position for the camera
         const targetY = ballPos.y + C.LEVEL_HEIGHT * C.CAMERA_INITIAL_Y_OFFSET_FACTOR;
         cameraRef.current.position.y += (targetY - cameraRef.current.position.y) * C.CAMERA_FOLLOW_SMOOTHING;
         
+        // Calculate the target for the camera to look at
         lookAtTarget.set(0, ballPos.y - C.LEVEL_HEIGHT * C.CAMERA_LOOK_AHEAD_Y_FACTOR, 0);
         cameraRef.current.lookAt(lookAtTarget);
       }
     });
   
-    return <PerspectiveCamera ref={cameraRef} makeDefault fov={C.CAMERA_FOV} />;
+    // The initial camera position is now set declaratively as a prop.
+    // It's calculated from the same constants as the ball's initial position,
+    // ensuring they are perfectly synchronized on the first frame.
+    return (
+        <PerspectiveCamera 
+            ref={cameraRef} 
+            makeDefault 
+            fov={C.CAMERA_FOV} 
+            position={[
+                C.CAMERA_INITIAL_X_OFFSET,
+                (C.LEVEL_HEIGHT * 1.5) + (C.LEVEL_HEIGHT * C.CAMERA_INITIAL_Y_OFFSET_FACTOR),
+                C.CAMERA_INITIAL_Z_POS
+            ]}
+        />
+    );
 };
 
 // Helper to create a single platform's segments
