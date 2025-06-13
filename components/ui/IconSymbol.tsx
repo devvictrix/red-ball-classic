@@ -1,5 +1,3 @@
-// File: components/ui/IconSymbol.tsx
-
 // Fallback for using MaterialIcons on Android and web.
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -15,7 +13,8 @@ export type MappedIconName =
   | 'chevron.left.forwardslash.chevron.right'
   | 'chevron.right'
   // | 'person.fill' // Example: if you had a profile icon
-  | 'gamecontroller.fill'; // Icon for the game
+  | 'gamecontroller.fill' // Icon for the game
+  | 'helix'; // Icon for Helix Jump
 
 // Use MappedIconName for the keys of MAPPING
 type IconMapping = Record<MappedIconName, ComponentProps<typeof MaterialIcons>['name']>;
@@ -33,6 +32,7 @@ const MAPPING: IconMapping = {
   'chevron.right': 'chevron-right',
   // 'person.fill': 'person', // Example
   'gamecontroller.fill': 'sports-esports', // Using 'sports-esports' for game controller
+  helix: 'rotate-right', // Mapping 'helix' to a suitable Material Icon
 };
 
 /**

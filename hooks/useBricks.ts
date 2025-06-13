@@ -9,7 +9,7 @@ import {
   BRICK_PADDING,
   BRICK_ROW_COUNT,
 } from '@/constants/gameConstants';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useColorScheme } from './useColorScheme';
 import type { GameAreaDimensions } from './useGameDimensions';
 
@@ -67,15 +67,29 @@ function adjustColor(color: string, factor: number): string {
   return color;
 }
 
+export interface InitializeBricksOptions {
+  currentScore?: number;
+  forcedDebugTier?: number;
+}
+
 export function useBricks() {
-  console.log(`${LOG_PREFIX} Hook initialized/re-rendered.`);
+  // console.log(`${LOG_PREFIX} Hook initialized/re-rendered.`); // Reduced logging for this hook
   const [bricks, setBricks] = useState<Brick[]>([]);
   const colorScheme = useColorScheme() ?? 'light';
 
   const BRICK_COLORS_FOR_TIERS = colorScheme === 'light' ? BRICK_TIER_COLORS_LIGHT : BRICK_TIER_COLORS_DARK;
 
-  const initializeBricks = useCallback((gameArea: GameAreaDimensions | null, currentScore: number = 0) => {
-    console.log(`${LOG_PREFIX} initializeBricks called. GameArea: ${JSON.stringify(gameArea)}, currentScore: ${currentScore}, colorScheme: ${colorScheme}`);
+  const bricksRef = useRef(bricks); // Create a ref to hold the latest bricks
+  useEffect(() => {
+    bricksRef.current = bricks; // Update the ref whenever bricks state changes
+    // console.log(`${LOG_PREFIX} bricksRef updated. Current count: ${bricksRef.current.length}, Active: ${bricksRef.current.filter(b => b.isActive).length}`);
+  }, [bricks]);
+
+
+  const initializeBricks = useCallback((gameArea: GameAreaDimensions | null, options?: InitializeBricksOptions) => {
+    const { currentScore = 0, forcedDebugTier } = options || {};
+    console.log(`${LOG_PREFIX} initializeBricks called. GameArea defined: ${!!gameArea}, score: ${currentScore}, forcedDebugTier: ${forcedDebugTier}, colorScheme: ${colorScheme}`);
+
     if (!gameArea) {
       console.warn(`${LOG_PREFIX} initializeBricks aborted: gameArea is null.`);
       return;
@@ -85,15 +99,22 @@ export function useBricks() {
     const totalBricksWidthArea = gameArea.width - (BRICK_OFFSET_LEFT * 2);
     const brickWidthWithPadding = totalBricksWidthArea / BRICK_COLUMN_COUNT;
     const brickWidth = brickWidthWithPadding - BRICK_PADDING;
-    console.log(`${LOG_PREFIX} initializeBricks: TotalWidthArea: ${totalBricksWidthArea.toFixed(2)}, BrickWidthWithPadding: ${brickWidthWithPadding.toFixed(2)}, BrickWidth: ${brickWidth.toFixed(2)}`);
+    // console.log(`${LOG_PREFIX} initializeBricks: TotalWidthArea: ${totalBricksWidthArea.toFixed(2)}, BrickWidthWithPadding: ${brickWidthWithPadding.toFixed(2)}, BrickWidth: ${brickWidth.toFixed(2)}`);
 
-    let difficultyTier = 1;
-    if (currentScore >= 500) {
-      difficultyTier = 3;
-    } else if (currentScore >= 200) {
-      difficultyTier = 2;
+    let difficultyTier: number;
+    if (typeof forcedDebugTier === 'number' && forcedDebugTier >= 1 && forcedDebugTier <= 3) {
+      difficultyTier = forcedDebugTier;
+      console.log(`${LOG_PREFIX} initializeBricks: USING FORCED DEBUG TIER: ${difficultyTier}`);
+    } else {
+      difficultyTier = 1;
+      if (currentScore >= 500) {
+        difficultyTier = 3;
+      } else if (currentScore >= 200) {
+        difficultyTier = 2;
+      }
+      // console.log(`${LOG_PREFIX} initializeBricks: Calculated difficultyTier: ${difficultyTier} for score ${currentScore}`);
     }
-    console.log(`${LOG_PREFIX} initializeBricks: Calculated difficultyTier: ${difficultyTier} for score ${currentScore}`);
+
 
     for (let r = 0; r < BRICK_ROW_COUNT; r++) {
       for (let c = 0; c < BRICK_COLUMN_COUNT; c++) {
@@ -101,17 +122,21 @@ export function useBricks() {
         const brickY = BRICK_OFFSET_TOP + r * (BRICK_HEIGHT + BRICK_PADDING) + BRICK_PADDING / 2;
 
         let hitsRequired = 1;
-        if (difficultyTier === 1) {
-          if (r >= BRICK_ROW_COUNT * 0.7) hitsRequired = 2;
+        // Tiered difficulty assignment
+        if (difficultyTier === 1) { // Easiest
+          // Mostly 1-hit, maybe some 2-hit in later rows
+          if (r >= BRICK_ROW_COUNT * 0.7) hitsRequired = 2; // Last ~30% of rows are 2-hit
           else hitsRequired = 1;
-        } else if (difficultyTier === 2) {
-          if (r >= BRICK_ROW_COUNT * 0.8) hitsRequired = 3;
-          else if (r >= BRICK_ROW_COUNT * 0.4) hitsRequired = 2;
-          else hitsRequired = 1;
-        } else {
-          if (r >= BRICK_ROW_COUNT * 0.6) hitsRequired = 3;
-          else if (r >= BRICK_ROW_COUNT * 0.2) hitsRequired = 2;
-          else hitsRequired = 1;
+        } else if (difficultyTier === 2) { // Medium
+          // Mix of 1, 2, 3-hit
+          if (r >= BRICK_ROW_COUNT * 0.8) hitsRequired = 3;       // Last 20% are 3-hit
+          else if (r >= BRICK_ROW_COUNT * 0.4) hitsRequired = 2; // Middle 40% are 2-hit
+          else hitsRequired = 1;                                 // First 40% are 1-hit
+        } else { // Hardest (difficultyTier === 3 or higher if debugged)
+          // Mostly 2 and 3-hit
+          if (r >= BRICK_ROW_COUNT * 0.6) hitsRequired = 3;       // Last 40% are 3-hit
+          else if (r >= BRICK_ROW_COUNT * 0.2) hitsRequired = 2; // Middle 40% are 2-hit
+          else hitsRequired = 1; // First 20% are 1-hit (or make them 2-hit too for very hard)
         }
 
         hitsRequired = Math.max(1, Math.min(hitsRequired, BRICK_COLORS_FOR_TIERS.length));
@@ -135,8 +160,8 @@ export function useBricks() {
       }
     }
     setBricks(newBricks);
-    console.log(`${LOG_PREFIX} initializeBricks: Bricks set. Total count: ${newBricks.length}. First brick details: ${newBricks.length > 0 ? JSON.stringify(newBricks[0]) : 'N/A'}`);
-  }, [colorScheme, BRICK_COLORS_FOR_TIERS]);
+    console.log(`${LOG_PREFIX} initializeBricks: Bricks set. Total count: ${newBricks.length}. First brick hitsRequired: ${newBricks.length > 0 ? newBricks[0].hitsRequired : 'N/A'}`);
+  }, [colorScheme, BRICK_COLORS_FOR_TIERS, setBricks]); // BRICK_COLORS_FOR_TIERS depends on colorScheme. setBricks is stable.
 
   const handleBrickHit = useCallback((brickId: string): { brickDamaged: boolean, brickBroken: boolean, pointsAwarded: number } => {
     // console.log(`${LOG_PREFIX} handleBrickHit called for brickId: ${brickId}`);
@@ -160,13 +185,7 @@ export function useBricks() {
           } else {
             points = 1;
             const damageDisplayFactor = colorScheme === 'light' ? DAMAGED_COLOR_FACTOR_LIGHT : DAMAGED_COLOR_FACTOR_DARK;
-            // Interpolate damage color more clearly: closer to original when few hits, closer to 'damaged' color when many hits
-            const damageInterpolation = (newHits / brick.hitsRequired); // 0 to almost 1
-            // Make it so color changes more distinctly with each hit
-            // Example: If DAMAGED_COLOR_FACTOR_LIGHT is 0.7 (darker)
-            // effectiveFactor = 1 (no change) -> 0.7 (full change)
-            // effectiveFactor = 1 - ( (1 - damageDisplayFactor) * damageInterpolation ) for darkening
-            // effectiveFactor = 1 + ( (damageDisplayFactor - 1) * damageInterpolation ) for lightening
+            const damageInterpolation = (newHits / brick.hitsRequired);
             let effectiveFactor;
             if (damageDisplayFactor < 1) { // Darkening
               effectiveFactor = 1 - ((1 - damageDisplayFactor) * damageInterpolation);
@@ -182,34 +201,28 @@ export function useBricks() {
         return brick;
       });
       // console.log(`${LOG_PREFIX} handleBrickHit: setBricks updater finished. Comparing prevBricks and updatedBricks lengths: ${prevBricks.length} vs ${updatedBricks.length}`);
-      // For deep comparison, you'd need to iterate or use a library, but this indicates if map ran.
       return updatedBricks;
     });
-    // This log will execute *before* the setBricks updater function completes if it's async,
-    // but setBricks's updater is synchronous in terms of its own execution.
-    // The actual state update is scheduled by React.
-    // The `brickWasDamaged`, `brickWasBroken`, `points` are from the closure of the *last matching brick processed* by the map.
-    // This is generally fine if only one brick is hit per frame.
     // console.log(`${LOG_PREFIX} handleBrickHit: Returning after scheduling setBricks. brickId: ${brickId}, brickWasDamaged: ${brickWasDamaged}, brickWasBroken: ${brickWasBroken}, pointsAwarded: ${points}`);
     return { brickDamaged: brickWasDamaged, brickBroken: brickWasBroken, pointsAwarded: points };
-  }, [colorScheme]); // Removed setBricks from dep array (it's stable)
+  }, [colorScheme, setBricks, BRICK_COLORS_FOR_TIERS]); // BRICK_COLORS_FOR_TIERS depends on colorScheme. setBricks is stable.
 
-  const resetBricks = useCallback((gameArea: GameAreaDimensions | null, currentScore: number = 0) => {
-    console.log(`${LOG_PREFIX} resetBricks called. GameArea: ${JSON.stringify(gameArea)}, currentScore: ${currentScore}`);
-    initializeBricks(gameArea, currentScore);
-  }, [initializeBricks]);
+  const resetBricks = useCallback((gameArea: GameAreaDimensions | null, options?: InitializeBricksOptions) => {
+    const { currentScore = 0, forcedDebugTier } = options || {};
+    // console.log(`${LOG_PREFIX} resetBricks called. GameArea defined: ${!!gameArea}, score: ${currentScore}, forcedDebugTier: ${forcedDebugTier}`);
+    initializeBricks(gameArea, { currentScore, forcedDebugTier });
+  }, [initializeBricks]); // initializeBricks is now stable
 
   const allBricksCleared = useCallback((): boolean => {
-    // console.log(`${LOG_PREFIX} allBricksCleared called. Current bricks count: ${bricks.length}`);
-    if (bricks.length === 0 && !bricks.some(b => b.isActive)) { // If bricks array is empty AND no bricks were active (e.g. after init but before game start)
-      // console.log(`${LOG_PREFIX} allBricksCleared: No bricks available or none active, returning false (or true if game logic expects it for empty set).`);
-      return false; // Or true if this state means "cleared" because there's nothing to clear. Depends on game flow.
-      // For this game, if bricks array is empty, it means they haven't been initialized for the level yet.
+    // console.log(`${LOG_PREFIX} allBricksCleared called. Accessing bricksRef.current. Current count: ${bricksRef.current.length}`);
+    if (bricksRef.current.length === 0) { // Check if bricks have been initialized at all
+      // console.log(`${LOG_PREFIX} allBricksCleared: bricksRef.current is empty, returning false (level not started/no bricks).`);
+      return false;
     }
-    const result = bricks.every(brick => !brick.isActive);
-    // console.log(`${LOG_PREFIX} allBricksCleared: Result: ${result}. Active bricks: ${bricks.filter(b => b.isActive).length}`);
+    const result = bricksRef.current.every(brick => !brick.isActive);
+    // console.log(`${LOG_PREFIX} allBricksCleared: Result from bricksRef: ${result}. Active bricks in ref: ${bricksRef.current.filter(b => b.isActive).length}`);
     return result;
-  }, [bricks]);
+  }, []); // Now stable, uses ref and no direct state dependency
 
   return {
     bricks,
